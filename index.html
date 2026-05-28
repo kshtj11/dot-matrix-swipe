@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+    <title>Circle Mask Reveal</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #000;
+            overflow: hidden;
+        }
+        canvas {
+            cursor: pointer;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="540" height="620"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const W = 540, H = 620;
+        const COLS = 20, ROWS = 24;
+        const BASE_RADIUS = 0;
+        const MAX_RADIUS = 50;
+        const PEEK_RADIUS = 20;
+        const TOUCH_RADIUS = 50;
+        const TRAIL_RADIUS = 60;
+        const SWIPE_THRESHOLD = 90;
+        const EASE = 0.06;
+        const TRAIL_DECAY = 0.97;
+
+        const spacing = Math.min(W / COLS, H / ROWS);
+        const gridW = COLS * spacing;
+        const gridH = ROWS * spacing;
+        const ox = (W - gridW) / 2 + spacing / 2;
+        const oy = (H - gridH) / 2 + spacing / 2;
+
+        const circles = [];
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                circles.push({
+                    x: ox + c * spacing,
+                    y: oy + r * spacing,
+                    radius: BASE_RADIUS,
+                    target: BASE_RADIUS,
+                    trail: 0
+                });
+            }
+        }
+
+        let startY = null;
+        let lastPx = W / 2, lastPy = H / 2;
+        let unlockTime = null;
+        const UNLOCK_SPEED = 0.6; // px per ms for the radial wave
+
+        // home background placeholder — colorful gradient
+        const homeBg = document.createElement('canvas');
+        homeBg.width = W;
+        homeBg.height = H;
+        const homeCtx = homeBg.getContext('2d');
+
+        const g = homeCtx.createLinearGradient(0, 0, W, H);
+        g.addColorStop(0, '#ff6b6b');
+        g.addColorStop(0.3, '#ffd93d');
+        g.addColorStop(0.5, '#6bcb77');
+        g.addColorStop(0.7, '#4d96ff');
+        g.addColorStop(1, '#9b59b6');
+        homeCtx.fillStyle = g;
+        homeCtx.fillRect(0, 0, W, H);
+
+        for (let i = 0; i < 12; i++) {
+            homeCtx.beginPath();
+            homeCtx.arc(
+                80 + Math.random() * (W - 160),
+                80 + Math.random() * (H - 160),
+                30 + Math.random() * 60, 0, Math.PI * 2
+            );
+            homeCtx.fillStyle = `hsla(${Math.random() * 360}, 70%, 60%, 0.4)`;
+            homeCtx.fill();
+        }
+
+        // cover / lock screen
+        const cover = document.createElement('canvas');
+        cover.width = W;
+        cover.height = H;
+        const coverCtx = cover.getContext('2d');
+
+        coverCtx.fillStyle = '#0a0a0e';
+        coverCtx.fillRect(0, 0, W, H);
+
+        coverCtx.fillStyle = '#c8c8c8';
+        coverCtx.font = '600 96px "SF Mono", "Cascadia Code", "Consolas", monospace';
+        coverCtx.textAlign = 'center';
+        coverCtx.textBaseline = 'middle';
+        coverCtx.fillText('12:30', W / 2, H * 0.28);
+
+        // offscreen buffer for masked home
+        const masked = document.createElement('canvas');
+        masked.width = W;
+        masked.height = H;
+        const maskedCtx = masked.getContext('2d');
+
+        function poke(px, py) {
+            for (const c of circles) {
+                const d = Math.hypot(c.x - px, c.y - py);
+                // comet head — expand circles
+                if (d < TOUCH_RADIUS) {
+                    const t = 1 - d / TOUCH_RADIUS;
+                    const newTarget = BASE_RADIUS + (PEEK_RADIUS - BASE_RADIUS) * t;
+                    if (newTarget > c.target) c.target = Math.min(newTarget, PEEK_RADIUS);
+                }
+                // trail aura — exclusion glow in wider radius
+                if (d < TRAIL_RADIUS) {
+                    const t = 1 - d / TRAIL_RADIUS;
+                    c.trail = Math.max(c.trail, t);
+                }
+            }
+        }
+
+        function coords(e) {
+            const rect = canvas.getBoundingClientRect();
+            return [
+                (e.clientX - rect.left) * (W / rect.width),
+                (e.clientY - rect.top) * (H / rect.height)
+            ];
+        }
+
+        function revealAll(fromX, fromY) {
+            unlockTime = performance.now();
+            lastPx = fromX;
+            lastPy = fromY;
+        }
+
+        canvas.addEventListener('pointerdown', e => {
+            canvas.setPointerCapture(e.pointerId);
+            const [px, py] = coords(e);
+            lastPx = px; lastPy = py;
+            startY = py;
+            poke(px, py);
+        });
+        canvas.addEventListener('pointermove', e => {
+            if (e.pressure > 0) {
+                const [px, py] = coords(e);
+                lastPx = px; lastPy = py;
+                poke(px, py);
+                if (startY !== null && startY - py >= SWIPE_THRESHOLD) {
+                    revealAll(px, py);
+                    startY = null;
+                }
+            }
+        });
+        canvas.addEventListener('pointerup', () => { startY = null; });
+
+        (function draw() {
+            // radial unlock wave
+            if (unlockTime !== null) {
+                const elapsed = performance.now() - unlockTime;
+                const waveRadius = elapsed * UNLOCK_SPEED;
+                for (const c of circles) {
+                    const d = Math.hypot(c.x - lastPx, c.y - lastPy);
+                    if (d <= waveRadius && c.target < MAX_RADIUS) {
+                        c.target = MAX_RADIUS;
+                    }
+                }
+            }
+
+            for (const c of circles) {
+                c.radius += (c.target - c.radius) * EASE;
+                // decay trail slowly so it lingers
+                c.trail *= TRAIL_DECAY;
+                if (c.trail < 0.005) c.trail = 0;
+            }
+
+            // build masked home background (visible through circles)
+            maskedCtx.clearRect(0, 0, W, H);
+            maskedCtx.drawImage(homeBg, 0, 0);
+            maskedCtx.save();
+            maskedCtx.globalCompositeOperation = 'destination-in';
+            maskedCtx.beginPath();
+            for (const c of circles) {
+                maskedCtx.moveTo(c.x + c.radius, c.y);
+                maskedCtx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+            }
+            maskedCtx.fillStyle = '#fff';
+            maskedCtx.fill();
+            maskedCtx.restore();
+
+            // draw cover first, then masked home on top
+            ctx.clearRect(0, 0, W, H);
+            ctx.drawImage(cover, 0, 0);
+            ctx.drawImage(masked, 0, 0);
+
+            // draw trail — exclusion layer over everything
+            ctx.save();
+            ctx.globalCompositeOperation = 'exclusion';
+            for (const c of circles) {
+                if (c.trail > 0) {
+                    const r = (spacing / 2) * c.trail;
+                    ctx.beginPath();
+                    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${c.trail})`;
+                    ctx.fill();
+                }
+            }
+            ctx.restore();
+
+            requestAnimationFrame(draw);
+        })();
+    </script>
+</body>
+</html>
