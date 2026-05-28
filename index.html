@@ -269,7 +269,10 @@
                 cometX = COMET_REST_X;
                 cometY = COMET_REST_Y;
                 positionCometEl(cometX, cometY);
-                cometEl.classList.remove('fading', 'held');
+                cometEl.classList.remove('fading', 'held', 'visible');
+                cometEl.style.transition = 'none';
+                void cometEl.offsetWidth;
+                cometEl.style.transition = '';
                 cometEl.classList.add('visible');
             }
         }
@@ -305,7 +308,7 @@
 
         coverCtx.fillStyle = '#555';
         coverCtx.font = '400 12px sans-serif';
-        coverCtx.fillText('swipe up to unlock', W / 2, H * 0.88);
+        coverCtx.fillText('swipe up to unlock', W / 2, H * 0.88 + 20);
 
         // offscreen buffers
         const masked = document.createElement('canvas');
