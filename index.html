@@ -14,14 +14,40 @@
             background: #000;
             overflow: hidden;
         }
+        #wrap { position: relative; }
         canvas {
             cursor: pointer;
             touch-action: none;
+            display: block;
         }
+        #bgToggle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            touch-action: manipulation;
+        }
+        #bgToggle:active { background: rgba(255,255,255,0.25); }
     </style>
 </head>
 <body>
-    <canvas id="canvas" width="540" height="620"></canvas>
+    <div id="wrap">
+        <canvas id="canvas" width="540" height="620"></canvas>
+        <button id="bgToggle">&#x25B6;</button>
+    </div>
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
@@ -65,41 +91,97 @@
         const UNLOCK_SPEED = 0.6;
         let unlocked = false;
 
-        // pre-render exclusioned home bg (inverted colors)
+        // --- background management ---
+        const bgPaths = [
+            null, // index 0 = default gradient
+            'bgs/Frame 2609175.png',
+            'bgs/Frame 2609176.png',
+            'bgs/Frame 2609178.png',
+            'bgs/Group 5.png'
+        ];
+        let currentBgIndex = 0;
+
         const homeBg = document.createElement('canvas');
         homeBg.width = W;
         homeBg.height = H;
         const homeCtx = homeBg.getContext('2d');
 
-        const g = homeCtx.createLinearGradient(0, 0, W, H);
-        g.addColorStop(0, '#ff6b6b');
-        g.addColorStop(0.3, '#ffd93d');
-        g.addColorStop(0.5, '#6bcb77');
-        g.addColorStop(0.7, '#4d96ff');
-        g.addColorStop(1, '#9b59b6');
-        homeCtx.fillStyle = g;
-        homeCtx.fillRect(0, 0, W, H);
-
-        for (let i = 0; i < 12; i++) {
-            homeCtx.beginPath();
-            homeCtx.arc(
-                80 + Math.random() * (W - 160),
-                80 + Math.random() * (H - 160),
-                30 + Math.random() * 60, 0, Math.PI * 2
-            );
-            homeCtx.fillStyle = `hsla(${Math.random() * 360}, 70%, 60%, 0.4)`;
-            homeCtx.fill();
-        }
-
-        // bake the exclusioned version once
         const homeExcl = document.createElement('canvas');
         homeExcl.width = W;
         homeExcl.height = H;
         const exclCtx = homeExcl.getContext('2d');
-        exclCtx.drawImage(homeBg, 0, 0);
-        exclCtx.globalCompositeOperation = 'exclusion';
-        exclCtx.fillStyle = '#ffffff';
-        exclCtx.fillRect(0, 0, W, H);
+
+        function drawDefaultBg() {
+            const g = homeCtx.createLinearGradient(0, 0, W, H);
+            g.addColorStop(0, '#ff6b6b');
+            g.addColorStop(0.3, '#ffd93d');
+            g.addColorStop(0.5, '#6bcb77');
+            g.addColorStop(0.7, '#4d96ff');
+            g.addColorStop(1, '#9b59b6');
+            homeCtx.fillStyle = g;
+            homeCtx.fillRect(0, 0, W, H);
+
+            for (let i = 0; i < 12; i++) {
+                homeCtx.beginPath();
+                homeCtx.arc(
+                    80 + Math.random() * (W - 160),
+                    80 + Math.random() * (H - 160),
+                    30 + Math.random() * 60, 0, Math.PI * 2
+                );
+                homeCtx.fillStyle = `hsla(${Math.random() * 360}, 70%, 60%, 0.4)`;
+                homeCtx.fill();
+            }
+            bakeExclusion();
+        }
+
+        function bakeExclusion() {
+            exclCtx.clearRect(0, 0, W, H);
+            exclCtx.drawImage(homeBg, 0, 0);
+            exclCtx.globalCompositeOperation = 'exclusion';
+            exclCtx.fillStyle = '#ffffff';
+            exclCtx.fillRect(0, 0, W, H);
+            exclCtx.globalCompositeOperation = 'source-over';
+        }
+
+        function loadBg(index) {
+            if (index === 0) {
+                drawDefaultBg();
+                resetState();
+                return;
+            }
+            const img = new Image();
+            img.onload = () => {
+                homeCtx.clearRect(0, 0, W, H);
+                // cover-fit the image
+                const scale = Math.max(W / img.width, H / img.height);
+                const sw = img.width * scale;
+                const sh = img.height * scale;
+                homeCtx.drawImage(img, (W - sw) / 2, (H - sh) / 2, sw, sh);
+                bakeExclusion();
+                resetState();
+            };
+            img.src = bgPaths[index];
+        }
+
+        function resetState() {
+            unlocked = false;
+            unlockTime = null;
+            for (const c of circles) {
+                c.radius = BASE_RADIUS;
+                c.target = BASE_RADIUS;
+                c.trail = 0;
+            }
+        }
+
+        // init default bg
+        drawDefaultBg();
+
+        // toggle button
+        document.getElementById('bgToggle').addEventListener('click', e => {
+            e.stopPropagation();
+            currentBgIndex = (currentBgIndex + 1) % bgPaths.length;
+            loadBg(currentBgIndex);
+        });
 
         // cover / lock screen
         const cover = document.createElement('canvas');
@@ -243,12 +325,10 @@
             if (hasTrail) {
                 trailCtx.clearRect(0, 0, W, H);
                 trailCtx.drawImage(homeExcl, 0, 0);
-                // mask to trail dot shapes only
                 trailCtx.save();
                 trailCtx.globalCompositeOperation = 'destination-in';
                 trailCtx.beginPath();
                 for (const c of circles) {
-                    // only draw trail for circles not in the tap zone
                     if (c.trail > 0 && c.radius < 0.5) {
                         const r = TRAIL_DOT * c.trail;
                         trailCtx.moveTo(c.x + r, c.y);
@@ -258,7 +338,6 @@
                 trailCtx.fillStyle = '#fff';
                 trailCtx.fill();
                 trailCtx.restore();
-                // fade by trail intensity
                 trailCtx.save();
                 trailCtx.globalCompositeOperation = 'destination-out';
                 for (const c of circles) {
