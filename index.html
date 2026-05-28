@@ -31,8 +31,9 @@
         const BASE_RADIUS = 0;
         const MAX_RADIUS = 50;
         const PEEK_RADIUS = 20;
-        const TOUCH_RADIUS = 50;
-        const TRAIL_RADIUS = 60;
+        const TOUCH_RADIUS = 40;
+        const TRAIL_INNER = 40;
+        const TRAIL_OUTER = 70;
         const SWIPE_THRESHOLD = 90;
         const EASE = 0.06;
         const TRAIL_DECAY = 0.97;
@@ -108,18 +109,21 @@
         masked.height = H;
         const maskedCtx = masked.getContext('2d');
 
+        let unlocked = false;
+
         function poke(px, py) {
+            if (unlocked) return;
             for (const c of circles) {
                 const d = Math.hypot(c.x - px, c.y - py);
-                // comet head — expand circles
+                // comet head — expand circles (no exclusion here)
                 if (d < TOUCH_RADIUS) {
                     const t = 1 - d / TOUCH_RADIUS;
                     const newTarget = BASE_RADIUS + (PEEK_RADIUS - BASE_RADIUS) * t;
-                    if (newTarget > c.target) c.target = Math.min(newTarget, PEEK_RADIUS);
+                    c.target = Math.max(c.target, Math.min(newTarget, PEEK_RADIUS));
                 }
-                // trail aura — exclusion glow in wider radius
-                if (d < TRAIL_RADIUS) {
-                    const t = 1 - d / TRAIL_RADIUS;
+                // trail ring — exclusion only between inner and outer
+                if (d >= TRAIL_INNER && d < TRAIL_OUTER) {
+                    const t = 1 - (d - TRAIL_INNER) / (TRAIL_OUTER - TRAIL_INNER);
                     c.trail = Math.max(c.trail, t);
                 }
             }
@@ -135,8 +139,13 @@
 
         function revealAll(fromX, fromY) {
             unlockTime = performance.now();
+            unlocked = true;
             lastPx = fromX;
             lastPy = fromY;
+        }
+
+        function retract() {
+            for (const c of circles) c.target = BASE_RADIUS;
         }
 
         canvas.addEventListener('pointerdown', e => {
@@ -157,7 +166,10 @@
                 }
             }
         });
-        canvas.addEventListener('pointerup', () => { startY = null; });
+        canvas.addEventListener('pointerup', () => {
+            startY = null;
+            if (!unlocked) retract();
+        });
 
         (function draw() {
             // radial unlock wave
