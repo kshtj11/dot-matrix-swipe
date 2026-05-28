@@ -41,11 +41,21 @@
             touch-action: manipulation;
         }
         #bgToggle:active { background: rgba(255,255,255,0.25); }
+        #bgLabel {
+            position: absolute;
+            top: 14px;
+            right: 48px;
+            color: rgba(255,255,255,0.4);
+            font: 400 11px sans-serif;
+            z-index: 10;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
     <div id="wrap">
         <canvas id="canvas" width="540" height="620"></canvas>
+        <span id="bgLabel">1 / 5</span>
         <button id="bgToggle">&#x25B6;</button>
     </div>
     <script>
@@ -176,11 +186,17 @@
         // init default bg
         drawDefaultBg();
 
+        const bgLabel = document.getElementById('bgLabel');
+        function updateLabel() {
+            bgLabel.textContent = `${currentBgIndex + 1} / ${bgPaths.length}`;
+        }
+
         // toggle button
         document.getElementById('bgToggle').addEventListener('click', e => {
             e.stopPropagation();
             currentBgIndex = (currentBgIndex + 1) % bgPaths.length;
             loadBg(currentBgIndex);
+            updateLabel();
         });
 
         // cover / lock screen
@@ -243,6 +259,7 @@
             lastPx = fromX;
             lastPy = fromY;
             for (const c of circles) c.trail = 0;
+            setTimeout(resetState, 2000);
         }
 
         function retract() {
