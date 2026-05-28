@@ -30,19 +30,21 @@
         const COLS = 20, ROWS = 24;
         const BASE_RADIUS = 0;
         const MAX_RADIUS = 50;
-        const PEEK_RADIUS = 20;
+        const PEEK_RADIUS = 28;
         const TOUCH_RADIUS = 40;
         const TRAIL_INNER = 40;
         const TRAIL_OUTER = 70;
         const SWIPE_THRESHOLD = 90;
         const EASE = 0.06;
-        const TRAIL_DECAY = 0.97;
+        const RETRACT_EASE = 0.14;
+        const TRAIL_DECAY = 0.985;
 
         const spacing = Math.min(W / COLS, H / ROWS);
         const gridW = COLS * spacing;
         const gridH = ROWS * spacing;
         const ox = (W - gridW) / 2 + spacing / 2;
         const oy = (H - gridH) / 2 + spacing / 2;
+        const TRAIL_DOT = spacing * 0.35;
 
         const circles = [];
         for (let r = 0; r < ROWS; r++) {
@@ -60,9 +62,10 @@
         let startY = null;
         let lastPx = W / 2, lastPy = H / 2;
         let unlockTime = null;
-        const UNLOCK_SPEED = 0.6; // px per ms for the radial wave
+        const UNLOCK_SPEED = 0.6;
+        let unlocked = false;
 
-        // home background placeholder — colorful gradient
+        // pre-render exclusioned home bg (inverted colors)
         const homeBg = document.createElement('canvas');
         homeBg.width = W;
         homeBg.height = H;
@@ -88,6 +91,16 @@
             homeCtx.fill();
         }
 
+        // bake the exclusioned version once
+        const homeExcl = document.createElement('canvas');
+        homeExcl.width = W;
+        homeExcl.height = H;
+        const exclCtx = homeExcl.getContext('2d');
+        exclCtx.drawImage(homeBg, 0, 0);
+        exclCtx.globalCompositeOperation = 'exclusion';
+        exclCtx.fillStyle = '#ffffff';
+        exclCtx.fillRect(0, 0, W, H);
+
         // cover / lock screen
         const cover = document.createElement('canvas');
         cover.width = W;
@@ -103,25 +116,30 @@
         coverCtx.textBaseline = 'middle';
         coverCtx.fillText('12:30', W / 2, H * 0.28);
 
-        // offscreen buffer for masked home
+        coverCtx.fillStyle = '#555';
+        coverCtx.font = '400 12px sans-serif';
+        coverCtx.fillText('swipe up to unlock', W / 2, H * 0.88);
+
+        // offscreen buffers
         const masked = document.createElement('canvas');
         masked.width = W;
         masked.height = H;
         const maskedCtx = masked.getContext('2d');
 
-        let unlocked = false;
+        const trailBuf = document.createElement('canvas');
+        trailBuf.width = W;
+        trailBuf.height = H;
+        const trailCtx = trailBuf.getContext('2d');
 
         function poke(px, py) {
             if (unlocked) return;
             for (const c of circles) {
                 const d = Math.hypot(c.x - px, c.y - py);
-                // comet head — expand circles (no exclusion here)
                 if (d < TOUCH_RADIUS) {
                     const t = 1 - d / TOUCH_RADIUS;
                     const newTarget = BASE_RADIUS + (PEEK_RADIUS - BASE_RADIUS) * t;
                     c.target = Math.max(c.target, Math.min(newTarget, PEEK_RADIUS));
                 }
-                // trail ring — exclusion only between inner and outer
                 if (d >= TRAIL_INNER && d < TRAIL_OUTER) {
                     const t = 1 - (d - TRAIL_INNER) / (TRAIL_OUTER - TRAIL_INNER);
                     c.trail = Math.max(c.trail, t);
@@ -142,6 +160,7 @@
             unlocked = true;
             lastPx = fromX;
             lastPy = fromY;
+            for (const c of circles) c.trail = 0;
         }
 
         function retract() {
@@ -184,45 +203,77 @@
                 }
             }
 
+            let hasTrail = false;
+            let hasReveal = false;
             for (const c of circles) {
-                c.radius += (c.target - c.radius) * EASE;
-                // decay trail slowly so it lingers
+                const ease = c.target < c.radius ? RETRACT_EASE : EASE;
+                c.radius += (c.target - c.radius) * ease;
+                if (c.radius < 0.1) c.radius = 0;
+                if (c.radius > 0) hasReveal = true;
+
                 c.trail *= TRAIL_DECAY;
                 if (c.trail < 0.005) c.trail = 0;
+                if (c.trail > 0) hasTrail = true;
             }
 
-            // build masked home background (visible through circles)
-            maskedCtx.clearRect(0, 0, W, H);
-            maskedCtx.drawImage(homeBg, 0, 0);
-            maskedCtx.save();
-            maskedCtx.globalCompositeOperation = 'destination-in';
-            maskedCtx.beginPath();
-            for (const c of circles) {
-                maskedCtx.moveTo(c.x + c.radius, c.y);
-                maskedCtx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
-            }
-            maskedCtx.fillStyle = '#fff';
-            maskedCtx.fill();
-            maskedCtx.restore();
-
-            // draw cover first, then masked home on top
+            // composite: start with cover
             ctx.clearRect(0, 0, W, H);
             ctx.drawImage(cover, 0, 0);
-            ctx.drawImage(masked, 0, 0);
 
-            // draw trail — exclusion layer over everything
-            ctx.save();
-            ctx.globalCompositeOperation = 'exclusion';
-            for (const c of circles) {
-                if (c.trail > 0) {
-                    const r = (spacing / 2) * c.trail;
-                    ctx.beginPath();
-                    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(255, 255, 255, ${c.trail})`;
-                    ctx.fill();
+            // build masked home background (only when circles are visible)
+            if (hasReveal) {
+                maskedCtx.clearRect(0, 0, W, H);
+                maskedCtx.drawImage(homeBg, 0, 0);
+                maskedCtx.save();
+                maskedCtx.globalCompositeOperation = 'destination-in';
+                maskedCtx.beginPath();
+                for (const c of circles) {
+                    if (c.radius > 0.1) {
+                        maskedCtx.moveTo(c.x + c.radius, c.y);
+                        maskedCtx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+                    }
                 }
+                maskedCtx.fillStyle = '#fff';
+                maskedCtx.fill();
+                maskedCtx.restore();
+                ctx.drawImage(masked, 0, 0);
             }
-            ctx.restore();
+
+            // exclusion trail — only when active, skip tap-area circles
+            if (hasTrail) {
+                trailCtx.clearRect(0, 0, W, H);
+                trailCtx.drawImage(homeExcl, 0, 0);
+                // mask to trail dot shapes only
+                trailCtx.save();
+                trailCtx.globalCompositeOperation = 'destination-in';
+                trailCtx.beginPath();
+                for (const c of circles) {
+                    // only draw trail for circles not in the tap zone
+                    if (c.trail > 0 && c.radius < 0.5) {
+                        const r = TRAIL_DOT * c.trail;
+                        trailCtx.moveTo(c.x + r, c.y);
+                        trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
+                    }
+                }
+                trailCtx.fillStyle = '#fff';
+                trailCtx.fill();
+                trailCtx.restore();
+                // fade by trail intensity
+                trailCtx.save();
+                trailCtx.globalCompositeOperation = 'destination-out';
+                for (const c of circles) {
+                    if (c.trail > 0 && c.trail < 1 && c.radius < 0.5) {
+                        const r = TRAIL_DOT * c.trail;
+                        trailCtx.beginPath();
+                        trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
+                        trailCtx.fillStyle = `rgba(0,0,0,${1 - c.trail})`;
+                        trailCtx.fill();
+                    }
+                }
+                trailCtx.restore();
+
+                ctx.drawImage(trailBuf, 0, 0);
+            }
 
             requestAnimationFrame(draw);
         })();
