@@ -20,10 +20,9 @@
             touch-action: none;
             display: block;
         }
-        #bgToggle {
+        .ctrl-btn {
             position: absolute;
             top: 10px;
-            right: 10px;
             width: 32px;
             height: 32px;
             border-radius: 50%;
@@ -40,27 +39,74 @@
             -webkit-backdrop-filter: blur(4px);
             touch-action: manipulation;
         }
-        #bgToggle:active { background: rgba(255,255,255,0.25); }
+        .ctrl-btn:active { background: rgba(255,255,255,0.25); }
+        .ctrl-btn.on { border-color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.25); }
+        #bgToggle { right: 10px; }
+        #cometToggle { right: 48px; font-size: 11px; }
         #bgLabel {
             position: absolute;
             top: 14px;
-            right: 48px;
+            right: 86px;
             color: rgba(255,255,255,0.4);
             font: 400 11px sans-serif;
             z-index: 10;
             pointer-events: none;
+        }
+        /* comet launcher element */
+        #comet {
+            position: absolute;
+            left: 226px;
+            top: 506px;
+            width: 88px;
+            height: 88px;
+            pointer-events: none;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #comet.visible { opacity: 1; }
+        #comet .ring-outer {
+            position: absolute;
+            left: 15.19%;
+            right: 16.25%;
+            top: 15.54%;
+            bottom: 15.98%;
+            border-radius: 50%;
+            background: rgba(128, 128, 128, 0.6);
+            box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+        }
+        #comet .ring-inner {
+            position: absolute;
+            left: 28.9%;
+            right: 29.96%;
+            top: 29.23%;
+            bottom: 29.68%;
+            border-radius: 50%;
+            background: #fff;
+        }
+        #comet.fading {
+            opacity: 0;
+            transition: opacity 0.5s ease-out;
         }
     </style>
 </head>
 <body>
     <div id="wrap">
         <canvas id="canvas" width="540" height="620"></canvas>
+        <div id="comet">
+            <div class="ring-outer"></div>
+            <div class="ring-inner"></div>
+        </div>
         <span id="bgLabel">1 / 5</span>
-        <button id="bgToggle">&#x25B6;</button>
+        <button id="cometToggle" class="ctrl-btn">&#x2604;</button>
+        <button id="bgToggle" class="ctrl-btn">&#x25B6;</button>
     </div>
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
+        const cometEl = document.getElementById('comet');
 
         const W = 540, H = 620;
         const COLS = 20, ROWS = 24;
@@ -70,6 +116,8 @@
         const TOUCH_RADIUS = 40;
         const TRAIL_INNER = 40;
         const TRAIL_OUTER = 70;
+        const TRAIL_INNER_COMET = 30;
+        const TRAIL_OUTER_COMET = 50;
         const SWIPE_THRESHOLD = 90;
         const EASE = 0.08;
         const RETRACT_EASE = 0.19;
@@ -100,10 +148,25 @@
         let unlockTime = null;
         const UNLOCK_SPEED = 0.6;
         let unlocked = false;
+        let cometMode = false;
+
+        // --- comet toggle ---
+        const cometToggleBtn = document.getElementById('cometToggle');
+        cometToggleBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            cometMode = !cometMode;
+            cometToggleBtn.classList.toggle('on', cometMode);
+            if (cometMode) {
+                cometEl.classList.add('visible');
+                cometEl.classList.remove('fading');
+            } else {
+                cometEl.classList.remove('visible');
+            }
+        });
 
         // --- background management ---
         const bgPaths = [
-            null, // index 0 = default gradient
+            null,
             'bgs/Frame 2609175.png',
             'bgs/Frame 2609176.png',
             'bgs/Frame 2609178.png',
@@ -162,7 +225,6 @@
             const img = new Image();
             img.onload = () => {
                 homeCtx.clearRect(0, 0, W, H);
-                // cover-fit the image
                 const scale = Math.max(W / img.width, H / img.height);
                 const sw = img.width * scale;
                 const sh = img.height * scale;
@@ -181,9 +243,13 @@
                 c.target = BASE_RADIUS;
                 c.trail = 0;
             }
+            // restore comet if in comet mode
+            if (cometMode) {
+                cometEl.classList.remove('fading');
+                cometEl.classList.add('visible');
+            }
         }
 
-        // init default bg
         drawDefaultBg();
 
         const bgLabel = document.getElementById('bgLabel');
@@ -191,7 +257,6 @@
             bgLabel.textContent = `${currentBgIndex + 1} / ${bgPaths.length}`;
         }
 
-        // toggle button
         document.getElementById('bgToggle').addEventListener('click', e => {
             e.stopPropagation();
             currentBgIndex = (currentBgIndex + 1) % bgPaths.length;
@@ -231,6 +296,8 @@
 
         function poke(px, py) {
             if (unlocked) return;
+            const tInner = cometMode ? TRAIL_INNER_COMET : TRAIL_INNER;
+            const tOuter = cometMode ? TRAIL_OUTER_COMET : TRAIL_OUTER;
             for (const c of circles) {
                 const d = Math.hypot(c.x - px, c.y - py);
                 if (d < TOUCH_RADIUS) {
@@ -238,8 +305,8 @@
                     const newTarget = BASE_RADIUS + (PEEK_RADIUS - BASE_RADIUS) * t;
                     c.target = Math.max(c.target, Math.min(newTarget, PEEK_RADIUS));
                 }
-                if (d >= TRAIL_INNER && d < TRAIL_OUTER) {
-                    const t = 1 - (d - TRAIL_INNER) / (TRAIL_OUTER - TRAIL_INNER);
+                if (d >= tInner && d < tOuter) {
+                    const t = 1 - (d - tInner) / (tOuter - tInner);
                     c.trail = Math.max(c.trail, t);
                 }
             }
@@ -259,6 +326,10 @@
             lastPx = fromX;
             lastPy = fromY;
             for (const c of circles) c.trail = 0;
+            // fade comet element on unlock
+            if (cometMode) {
+                cometEl.classList.add('fading');
+            }
             setTimeout(resetState, 4000);
         }
 
