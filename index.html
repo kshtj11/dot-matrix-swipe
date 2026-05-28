@@ -52,17 +52,16 @@
             z-index: 10;
             pointer-events: none;
         }
-        /* comet launcher element */
+        /* comet element */
         #comet {
             position: absolute;
-            left: 226px;
-            top: 506px;
             width: 88px;
             height: 88px;
             pointer-events: none;
             z-index: 5;
             opacity: 0;
             transition: opacity 0.3s;
+            transform: translate(-50%, -50%);
         }
         #comet.visible { opacity: 1; }
         #comet .ring-outer {
@@ -76,6 +75,7 @@
             box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.4);
             backdrop-filter: blur(2px);
             -webkit-backdrop-filter: blur(2px);
+            transition: opacity 0.15s;
         }
         #comet .ring-inner {
             position: absolute;
@@ -86,6 +86,7 @@
             border-radius: 50%;
             background: #fff;
         }
+        #comet.held .ring-outer { opacity: 0; }
         #comet.fading {
             opacity: 0;
             transition: opacity 0.5s ease-out;
@@ -107,6 +108,7 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const cometEl = document.getElementById('comet');
+        const wrap = document.getElementById('wrap');
 
         const W = 540, H = 620;
         const COLS = 20, ROWS = 24;
@@ -122,6 +124,8 @@
         const EASE = 0.08;
         const RETRACT_EASE = 0.19;
         const TRAIL_DECAY = 0.985;
+        const COMET_SIZE = 88;
+        const COMET_HIT = 60; // hit radius to grab the comet
 
         const spacing = Math.min(W / COLS, H / ROWS);
         const gridW = COLS * spacing;
@@ -129,6 +133,12 @@
         const ox = (W - gridW) / 2 + spacing / 2;
         const oy = (H - gridH) / 2 + spacing / 2;
         const TRAIL_DOT = spacing * 0.35;
+
+        // comet rest position — centered horizontally, bottom area of grid
+        const COMET_REST_X = W / 2;
+        const COMET_REST_Y = oy + (ROWS - 4) * spacing;
+        let cometX = COMET_REST_X;
+        let cometY = COMET_REST_Y;
 
         const circles = [];
         for (let r = 0; r < ROWS; r++) {
@@ -149,6 +159,13 @@
         const UNLOCK_SPEED = 0.6;
         let unlocked = false;
         let cometMode = false;
+        let draggingComet = false;
+
+        function positionCometEl(x, y) {
+            cometEl.style.left = x + 'px';
+            cometEl.style.top = y + 'px';
+        }
+        positionCometEl(COMET_REST_X, COMET_REST_Y);
 
         // --- comet toggle ---
         const cometToggleBtn = document.getElementById('cometToggle');
@@ -157,10 +174,14 @@
             cometMode = !cometMode;
             cometToggleBtn.classList.toggle('on', cometMode);
             if (cometMode) {
+                cometX = COMET_REST_X;
+                cometY = COMET_REST_Y;
+                positionCometEl(cometX, cometY);
+                cometEl.classList.remove('fading', 'held');
                 cometEl.classList.add('visible');
-                cometEl.classList.remove('fading');
             } else {
-                cometEl.classList.remove('visible');
+                cometEl.classList.remove('visible', 'held');
+                draggingComet = false;
             }
         });
 
@@ -238,14 +259,17 @@
         function resetState() {
             unlocked = false;
             unlockTime = null;
+            draggingComet = false;
             for (const c of circles) {
                 c.radius = BASE_RADIUS;
                 c.target = BASE_RADIUS;
                 c.trail = 0;
             }
-            // restore comet if in comet mode
             if (cometMode) {
-                cometEl.classList.remove('fading');
+                cometX = COMET_REST_X;
+                cometY = COMET_REST_Y;
+                positionCometEl(cometX, cometY);
+                cometEl.classList.remove('fading', 'held');
                 cometEl.classList.add('visible');
             }
         }
@@ -326,9 +350,10 @@
             lastPx = fromX;
             lastPy = fromY;
             for (const c of circles) c.trail = 0;
-            // fade comet element on unlock
             if (cometMode) {
                 cometEl.classList.add('fading');
+                cometEl.classList.remove('held');
+                draggingComet = false;
             }
             setTimeout(resetState, 4000);
         }
@@ -342,22 +367,58 @@
             const [px, py] = coords(e);
             lastPx = px; lastPy = py;
             startY = py;
-            poke(px, py);
+
+            if (cometMode && !unlocked) {
+                // check if touching the comet
+                const dist = Math.hypot(px - cometX, py - cometY);
+                if (dist < COMET_HIT) {
+                    draggingComet = true;
+                    cometEl.classList.add('held');
+                    poke(px, py);
+                }
+                // ignore taps elsewhere in comet mode
+            } else {
+                poke(px, py);
+            }
         });
         canvas.addEventListener('pointermove', e => {
             if (e.pressure > 0) {
                 const [px, py] = coords(e);
                 lastPx = px; lastPy = py;
-                poke(px, py);
-                if (startY !== null && startY - py >= SWIPE_THRESHOLD) {
-                    revealAll(px, py);
-                    startY = null;
+
+                if (cometMode && draggingComet) {
+                    cometX = px;
+                    cometY = py;
+                    positionCometEl(cometX, cometY);
+                    poke(px, py);
+                    if (startY !== null && startY - py >= SWIPE_THRESHOLD) {
+                        revealAll(px, py);
+                        startY = null;
+                    }
+                } else if (!cometMode) {
+                    poke(px, py);
+                    if (startY !== null && startY - py >= SWIPE_THRESHOLD) {
+                        revealAll(px, py);
+                        startY = null;
+                    }
                 }
             }
         });
         canvas.addEventListener('pointerup', () => {
             startY = null;
-            if (!unlocked) retract();
+            if (cometMode && draggingComet && !unlocked) {
+                draggingComet = false;
+                cometEl.classList.remove('held');
+                // animate comet back to rest
+                cometX = COMET_REST_X;
+                cometY = COMET_REST_Y;
+                cometEl.style.transition = 'left 0.3s, top 0.3s, opacity 0.3s';
+                positionCometEl(cometX, cometY);
+                setTimeout(() => { cometEl.style.transition = 'opacity 0.3s'; }, 300);
+                retract();
+            } else if (!cometMode && !unlocked) {
+                retract();
+            }
         });
 
         (function draw() {
