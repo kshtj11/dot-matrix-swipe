@@ -43,10 +43,11 @@
         .ctrl-btn.on { border-color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.25); }
         #bgToggle { right: 10px; }
         #cometToggle { right: 48px; font-size: 11px; }
+        #burstToggle { right: 86px; font-size: 11px; }
         #bgLabel {
             position: absolute;
             top: 14px;
-            right: 86px;
+            right: 124px;
             color: rgba(255,255,255,0.4);
             font: 400 11px sans-serif;
             z-index: 10;
@@ -101,6 +102,7 @@
             <div class="ring-inner"></div>
         </div>
         <span id="bgLabel">1 / 5</span>
+        <button id="burstToggle" class="ctrl-btn">&#x2605;</button>
         <button id="cometToggle" class="ctrl-btn">&#x2604;</button>
         <button id="bgToggle" class="ctrl-btn">&#x25B6;</button>
     </div>
@@ -159,6 +161,14 @@
         let unlockTime = null;
         let unlocked = false;
         let cometMode = false;
+        let burstMode = false;
+
+        const burstToggleBtn = document.getElementById('burstToggle');
+        burstToggleBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            burstMode = !burstMode;
+            burstToggleBtn.classList.toggle('on', burstMode);
+        });
         let draggingComet = false;
 
         function positionCometEl(x, y) {
@@ -348,11 +358,16 @@
         }
 
         function revealAll(fromX, fromY) {
-            unlockTime = performance.now();
             unlocked = true;
             lastPx = fromX;
             lastPy = fromY;
             for (const c of circles) c.trail = 0;
+            if (burstMode) {
+                // all circles fire at once
+                for (const c of circles) c.target = MAX_RADIUS;
+            } else {
+                unlockTime = performance.now();
+            }
             if (cometMode) {
                 cometEl.classList.add('fading');
                 cometEl.classList.remove('held');
