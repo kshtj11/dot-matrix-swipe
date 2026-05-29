@@ -125,7 +125,12 @@
         const RETRACT_EASE = 0.19;
         const TRAIL_DECAY = 0.985;
         const COMET_SIZE = 88;
-        const COMET_HIT = 60; // hit radius to grab the comet
+        const COMET_HIT = 60;
+        // unlock wave — ease-out + spring overshoot, 15% faster
+        const UNLOCK_DURATION = 1220; // ms for wave to cross max screen distance, 15% faster
+        const SPRING_STIFFNESS = 0.28;
+        const SPRING_DAMPING = 0.62;
+        const OVERSHOOT = 1.22; // circles spring to 122% then settle at 100%
 
         const spacing = Math.min(W / COLS, H / ROWS);
         const gridW = COLS * spacing;
@@ -148,7 +153,9 @@
                     y: oy + r * spacing,
                     radius: BASE_RADIUS,
                     target: BASE_RADIUS,
-                    trail: 0
+                    trail: 0,
+                    vel: 0,
+                    springing: false
                 });
             }
         }
@@ -156,8 +163,9 @@
         let startY = null;
         let lastPx = W / 2, lastPy = H / 2;
         let unlockTime = null;
-        const UNLOCK_SPEED = 0.6;
         let unlocked = false;
+        // max possible distance from any tap to corner
+        const MAX_DIST = Math.hypot(W, H);
         let cometMode = false;
         let draggingComet = false;
 
@@ -264,6 +272,8 @@
                 c.radius = BASE_RADIUS;
                 c.target = BASE_RADIUS;
                 c.trail = 0;
+                c.vel = 0;
+                c.springing = false;
             }
             if (cometMode) {
                 cometX = COMET_REST_X;
@@ -425,14 +435,19 @@
         });
 
         (function draw() {
-            // radial unlock wave
+            // ease-out radial unlock wave
             if (unlockTime !== null) {
                 const elapsed = performance.now() - unlockTime;
-                const waveRadius = elapsed * UNLOCK_SPEED;
+                // ease-out: t^0.45 — rushes out fast, trails off at edges
+                const t = Math.min(elapsed / UNLOCK_DURATION, 1);
+                const eased = Math.pow(t, 0.45);
+                const waveRadius = eased * MAX_DIST;
                 for (const c of circles) {
                     const d = Math.hypot(c.x - lastPx, c.y - lastPy);
-                    if (d <= waveRadius && c.target < MAX_RADIUS) {
-                        c.target = MAX_RADIUS;
+                    if (d <= waveRadius && !c.springing) {
+                        c.springing = true;
+                        c.target = MAX_RADIUS * OVERSHOOT;
+                        c.vel = 0;
                     }
                 }
             }
@@ -440,8 +455,19 @@
             let hasTrail = false;
             let hasReveal = false;
             for (const c of circles) {
-                const ease = c.target < c.radius ? RETRACT_EASE : EASE;
-                c.radius += (c.target - c.radius) * ease;
+                if (c.springing) {
+                    // spring physics toward MAX_RADIUS
+                    const force = (MAX_RADIUS - c.radius) * SPRING_STIFFNESS;
+                    c.vel = c.vel * SPRING_DAMPING + force;
+                    c.radius += c.vel;
+                    if (Math.abs(c.radius - MAX_RADIUS) < 0.15 && Math.abs(c.vel) < 0.15) {
+                        c.radius = MAX_RADIUS;
+                        c.vel = 0;
+                    }
+                } else {
+                    const ease = c.target < c.radius ? RETRACT_EASE : EASE;
+                    c.radius += (c.target - c.radius) * ease;
+                }
                 if (c.radius < 0.1) c.radius = 0;
                 if (c.radius > 0) hasReveal = true;
 
