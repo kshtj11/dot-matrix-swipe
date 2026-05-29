@@ -160,7 +160,7 @@
         let lastPx = W / 2, lastPy = H / 2;
         let unlockTime = null;
         let unlocked = false;
-        let cometMode = false;
+        let cometMode = true;
         let burstMode = false;
 
         const burstToggleBtn = document.getElementById('burstToggle');
@@ -203,7 +203,7 @@
             'bgs/Frame 2609178.png',
             'bgs/Group 5.png'
         ];
-        let currentBgIndex = 0;
+        let currentBgIndex = 2;
 
         const homeBg = document.createElement('canvas');
         homeBg.width = W;
@@ -287,12 +287,15 @@
             }
         }
 
-        drawDefaultBg();
+        loadBg(currentBgIndex);
 
         const bgLabel = document.getElementById('bgLabel');
         function updateLabel() {
             bgLabel.textContent = `${currentBgIndex + 1} / ${bgPaths.length}`;
         }
+        // startup defaults: show correct label + active button state
+        updateLabel();
+        cometToggleBtn.classList.add('on');
 
         document.getElementById('bgToggle').addEventListener('click', e => {
             e.stopPropagation();
