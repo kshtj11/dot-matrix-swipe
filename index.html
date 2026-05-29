@@ -215,6 +215,35 @@
         homeExcl.height = H;
         const exclCtx = homeExcl.getContext('2d');
 
+        // cover / lock screen
+        const cover = document.createElement('canvas');
+        cover.width = W;
+        cover.height = H;
+        const coverCtx = cover.getContext('2d');
+
+        function drawCover(img) {
+            coverCtx.clearRect(0, 0, W, H);
+            if (img) {
+                const scale = Math.max(W / img.width, H / img.height);
+                const sw = img.width * scale;
+                const sh = img.height * scale;
+                coverCtx.drawImage(img, (W - sw) / 2, (H - sh) / 2, sw, sh);
+            } else {
+                coverCtx.fillStyle = '#0a0a0e';
+                coverCtx.fillRect(0, 0, W, H);
+            }
+
+            coverCtx.fillStyle = '#c8c8c8';
+            coverCtx.font = '600 96px "SF Mono", "Cascadia Code", "Consolas", monospace';
+            coverCtx.textAlign = 'center';
+            coverCtx.textBaseline = 'middle';
+            coverCtx.fillText('12:30', W / 2, H * 0.28);
+
+            coverCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            coverCtx.font = '400 12px sans-serif';
+            coverCtx.fillText('swipe up to unlock', W / 2, H * 0.88 + 20);
+        }
+
         function drawDefaultBg() {
             const g = homeCtx.createLinearGradient(0, 0, W, H);
             g.addColorStop(0, '#ff6b6b');
@@ -245,6 +274,20 @@
             exclCtx.fillStyle = '#ffffff';
             exclCtx.fillRect(0, 0, W, H);
             exclCtx.globalCompositeOperation = 'source-over';
+        }
+
+        let currentCoverIndex = 1;
+
+        function loadCover(index) {
+            if (index === 0) {
+                drawCover(null);
+                return;
+            }
+            const img = new Image();
+            img.onload = () => {
+                drawCover(img);
+            };
+            img.src = bgPaths[index];
         }
 
         function loadBg(index) {
@@ -288,6 +331,7 @@
         }
 
         loadBg(currentBgIndex);
+        loadCover(currentCoverIndex);
 
         const bgLabel = document.getElementById('bgLabel');
         function updateLabel() {
@@ -304,24 +348,18 @@
             updateLabel();
         });
 
+        window.addEventListener('keydown', e => {
+            if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                currentCoverIndex = (currentCoverIndex - 1 + bgPaths.length) % bgPaths.length;
+                loadCover(currentCoverIndex);
+            } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                currentCoverIndex = (currentCoverIndex + 1) % bgPaths.length;
+                loadCover(currentCoverIndex);
+            }
+        });
+
         // cover / lock screen
-        const cover = document.createElement('canvas');
-        cover.width = W;
-        cover.height = H;
-        const coverCtx = cover.getContext('2d');
 
-        coverCtx.fillStyle = '#0a0a0e';
-        coverCtx.fillRect(0, 0, W, H);
-
-        coverCtx.fillStyle = '#c8c8c8';
-        coverCtx.font = '600 96px "SF Mono", "Cascadia Code", "Consolas", monospace';
-        coverCtx.textAlign = 'center';
-        coverCtx.textBaseline = 'middle';
-        coverCtx.fillText('12:30', W / 2, H * 0.28);
-
-        coverCtx.fillStyle = '#555';
-        coverCtx.font = '400 12px sans-serif';
-        coverCtx.fillText('swipe up to unlock', W / 2, H * 0.88 + 20);
 
         // offscreen buffers
         const masked = document.createElement('canvas');
