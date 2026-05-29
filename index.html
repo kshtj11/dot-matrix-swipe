@@ -53,6 +53,16 @@
             z-index: 10;
             pointer-events: none;
         }
+        #coverToggle { left: 10px; }
+        #coverLabel {
+            position: absolute;
+            top: 14px;
+            left: 48px;
+            color: rgba(255,255,255,0.4);
+            font: 400 11px sans-serif;
+            z-index: 10;
+            pointer-events: none;
+        }
         /* comet element */
         #comet {
             position: absolute;
@@ -105,6 +115,8 @@
         <button id="burstToggle" class="ctrl-btn">&#x2605;</button>
         <button id="cometToggle" class="ctrl-btn">&#x2604;</button>
         <button id="bgToggle" class="ctrl-btn">&#x25B6;</button>
+        <button id="coverToggle" class="ctrl-btn">&#x25C0;</button>
+        <span id="coverLabel">1 / 5</span>
     </div>
     <script>
         const canvas = document.getElementById('canvas');
@@ -337,8 +349,15 @@
         function updateLabel() {
             bgLabel.textContent = `${currentBgIndex + 1} / ${bgPaths.length}`;
         }
+        
+        const coverLabel = document.getElementById('coverLabel');
+        function updateCoverLabel() {
+            coverLabel.textContent = `${currentCoverIndex + 1} / ${bgPaths.length}`;
+        }
+
         // startup defaults: show correct label + active button state
         updateLabel();
+        updateCoverLabel();
         cometToggleBtn.classList.add('on');
 
         document.getElementById('bgToggle').addEventListener('click', e => {
@@ -348,13 +367,22 @@
             updateLabel();
         });
 
+        document.getElementById('coverToggle').addEventListener('click', e => {
+            e.stopPropagation();
+            currentCoverIndex = (currentCoverIndex + 1) % bgPaths.length;
+            loadCover(currentCoverIndex);
+            updateCoverLabel();
+        });
+
         window.addEventListener('keydown', e => {
             if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
                 currentCoverIndex = (currentCoverIndex - 1 + bgPaths.length) % bgPaths.length;
                 loadCover(currentCoverIndex);
+                updateCoverLabel();
             } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
                 currentCoverIndex = (currentCoverIndex + 1) % bgPaths.length;
                 loadCover(currentCoverIndex);
+                updateCoverLabel();
             }
         });
 
