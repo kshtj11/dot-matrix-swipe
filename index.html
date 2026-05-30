@@ -139,8 +139,9 @@
         const SWIPE_THRESHOLD = 90;
         const EASE = 0.08;
         const RETRACT_EASE = 0.19;
-        const TRAIL_DECAY      = 0.993; // post-release: slow linger
-        const TRAIL_DECAY_HELD = 0.965; // while held: faster burn-in → creates spatial gradient
+        const TRAIL_DECAY        = 0.993; // exclusion/accent dot fade
+        const TRAIL_DECAY_HELD   = 0.965; // while held
+        const TARGET_TRAIL_DECAY = 0.96;  // how fast reveal circles shrink after comet moves past
         const COMET_SIZE = 88;
         const COMET_HIT = 60;
         const UNLOCK_SPEED = 0.82; // px per ms — crosses ~820px in 1000ms
@@ -585,9 +586,7 @@
                 cometEl.style.transition = 'left 0.3s, top 0.3s, opacity 0.3s';
                 positionCometEl(cometX, cometY);
                 setTimeout(() => { cometEl.style.transition = 'opacity 0.3s'; }, 300);
-                retract();
-            } else if (!cometMode && !unlocked) {
-                retract();
+                // targets decay via draw loop — no hard retract needed
             }
         });
 
@@ -607,6 +606,11 @@
             let hasTrail = false;
             let hasReveal = false;
             for (const c of circles) {
+                // gradually decay reveal targets so circles trail behind the comet
+                if (!unlocked) {
+                    c.target *= TARGET_TRAIL_DECAY;
+                    if (c.target < 0.5) c.target = 0;
+                }
                 const ease = c.target < c.radius ? RETRACT_EASE : EASE;
                 c.radius += (c.target - c.radius) * ease;
                 if (c.radius < 0.1) c.radius = 0;
