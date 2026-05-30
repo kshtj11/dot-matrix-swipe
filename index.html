@@ -53,11 +53,13 @@
             z-index: 10;
             pointer-events: none;
         }
-        #coverToggle { left: 10px; }
+        #exclusionToggle { left: 10px; font-size: 11px; font-weight: 700; }
+        #accentToggle    { left: 48px; font-size: 11px; font-weight: 700; }
+        #coverToggle     { left: 86px; }
         #coverLabel {
             position: absolute;
             top: 14px;
-            left: 48px;
+            left: 124px;
             color: rgba(255,255,255,0.4);
             font: 400 11px sans-serif;
             z-index: 10;
@@ -115,7 +117,9 @@
         <button id="burstToggle" class="ctrl-btn">&#x2605;</button>
         <button id="cometToggle" class="ctrl-btn">&#x2604;</button>
         <button id="bgToggle" class="ctrl-btn">&#x25B6;</button>
-        <button id="coverToggle" class="ctrl-btn">&#x25C0;</button>
+        <button id="exclusionToggle" class="ctrl-btn">E</button>
+        <button id="accentToggle"    class="ctrl-btn">A</button>
+        <button id="coverToggle"     class="ctrl-btn">&#x25C0;</button>
         <span id="coverLabel">1 / 5</span>
     </div>
     <script>
@@ -174,6 +178,64 @@
         let unlocked = false;
         let cometMode = true;
         let burstMode = false;
+        let exclusionMode = false;
+        let accentMode = false;
+        let accentColor = '#ffffff';
+
+        // --- accent color extraction ---
+        function _getLum(r, g, b) {
+            const f = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+            return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+        }
+        function _contrast(l1, l2) { return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); }
+        function _hsl2rgb(h, s, l) {
+            s /= 100; l /= 100;
+            const a = s * Math.min(l, 1 - l);
+            const f = n => { const k = (n + h / 30) % 12; return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1); };
+            return [f(0) * 255, f(8) * 255, f(4) * 255];
+        }
+        function computeAccentColor() {
+            const data = coverCtx.getImageData(0, 0, W, H).data;
+            const hBuckets = new Float32Array(36);
+            let totalLum = 0, n = 0;
+            for (let i = 0; i < data.length; i += 4 * 8) {
+                const r = data[i], g = data[i+1], b = data[i+2];
+                totalLum += _getLum(r, g, b);
+                n++;
+                const rn = r/255, gn = g/255, bn = b/255;
+                const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn), d = max - min;
+                if (d > 0.12) {
+                    const l2 = (max + min) / 2;
+                    let h;
+                    if (max === rn)      h = (((gn - bn) / d) % 6) * 60;
+                    else if (max === gn) h = ((bn - rn) / d + 2) * 60;
+                    else                 h = ((rn - gn) / d + 4) * 60;
+                    if (h < 0) h += 360;
+                    hBuckets[Math.floor(h / 10) % 36] += d / (1 - Math.abs(2 * l2 - 1) + 0.001);
+                }
+            }
+            const avgLum = totalLum / n;
+            let maxIdx = 0;
+            for (let i = 1; i < 36; i++) if (hBuckets[i] > hBuckets[maxIdx]) maxIdx = i;
+            const total = hBuckets.reduce((a, b) => a + b, 0);
+            const hue = (total > 0 && hBuckets[maxIdx] / total > 0.1) ? maxIdx * 10 + 5 : 215;
+
+            if (avgLum < 0.45) {
+                // dark/midtone bg → light accent, find max L that still hits 7:1
+                for (let sl = 97; sl >= 55; sl--) {
+                    const [r, g, b] = _hsl2rgb(hue, 80, sl);
+                    if (_contrast(_getLum(r, g, b), avgLum) >= 7) return `hsl(${hue},80%,${sl}%)`;
+                }
+                return `hsl(${hue},80%,95%)`;
+            } else {
+                // light bg → dark accent
+                for (let sl = 3; sl <= 45; sl++) {
+                    const [r, g, b] = _hsl2rgb(hue, 80, sl);
+                    if (_contrast(avgLum, _getLum(r, g, b)) >= 7) return `hsl(${hue},80%,${sl}%)`;
+                }
+                return `hsl(${hue},80%,10%)`;
+            }
+        }
 
         const burstToggleBtn = document.getElementById('burstToggle');
         burstToggleBtn.addEventListener('click', e => {
@@ -296,11 +358,13 @@
         function loadCover(index) {
             if (index === 0) {
                 drawCover(null);
+                if (accentMode) accentColor = computeAccentColor();
                 return;
             }
             const img = new Image();
             img.onload = () => {
                 drawCover(img);
+                if (accentMode) accentColor = computeAccentColor();
             };
             img.src = bgPaths[index];
         }
@@ -377,6 +441,27 @@
             updateCoverLabel();
         });
 
+        const exclusionToggleBtn = document.getElementById('exclusionToggle');
+        const accentToggleBtn    = document.getElementById('accentToggle');
+
+        exclusionToggleBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            exclusionMode = !exclusionMode;
+            if (exclusionMode) { accentMode = false; accentToggleBtn.classList.remove('on'); }
+            exclusionToggleBtn.classList.toggle('on', exclusionMode);
+        });
+
+        accentToggleBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            accentMode = !accentMode;
+            if (accentMode) {
+                exclusionMode = false;
+                exclusionToggleBtn.classList.remove('on');
+                accentColor = computeAccentColor();
+            }
+            accentToggleBtn.classList.toggle('on', accentMode);
+        });
+
         window.addEventListener('keydown', e => {
             if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
                 currentCoverIndex = (currentCoverIndex - 1 + bgPaths.length) % bgPaths.length;
@@ -414,7 +499,7 @@
                     const newTarget = BASE_RADIUS + (PEEK_RADIUS - BASE_RADIUS) * t;
                     c.target = Math.max(c.target, Math.min(newTarget, PEEK_RADIUS));
                 }
-                if (d >= tInner && d < tOuter) {
+                if ((exclusionMode || accentMode) && d >= tInner && d < tOuter) {
                     const t = 1 - (d - tInner) / (tOuter - tInner);
                     c.trail = Math.max(c.trail, t);
                 }
@@ -541,10 +626,15 @@
             ctx.clearRect(0, 0, W, H);
             ctx.drawImage(cover, 0, 0);
 
-            // build masked home background (only when circles are visible)
+            // build masked reveal (wallpaper OR solid accent) through circle dots
             if (hasReveal) {
                 maskedCtx.clearRect(0, 0, W, H);
-                maskedCtx.drawImage(homeBg, 0, 0);
+                if (accentMode) {
+                    maskedCtx.fillStyle = accentColor;
+                    maskedCtx.fillRect(0, 0, W, H);
+                } else {
+                    maskedCtx.drawImage(homeBg, 0, 0);
+                }
                 maskedCtx.save();
                 maskedCtx.globalCompositeOperation = 'destination-in';
                 maskedCtx.beginPath();
@@ -560,35 +650,52 @@
                 ctx.drawImage(masked, 0, 0);
             }
 
-            // exclusion trail — only when active, skip tap-area circles
+            // trail rendering — exclusion (inverted wallpaper) or accent (solid colour)
             if (hasTrail) {
                 trailCtx.clearRect(0, 0, W, H);
-                trailCtx.drawImage(homeExcl, 0, 0);
-                trailCtx.save();
-                trailCtx.globalCompositeOperation = 'destination-in';
-                trailCtx.beginPath();
-                for (const c of circles) {
-                    if (c.trail > 0 && c.radius < 0.5) {
-                        const r = TRAIL_DOT * c.trail;
-                        trailCtx.moveTo(c.x + r, c.y);
-                        trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
+
+                if (accentMode) {
+                    // solid accent colour dots that fade by trail value
+                    for (const c of circles) {
+                        if (c.trail > 0 && c.radius < 0.5) {
+                            const r = TRAIL_DOT * c.trail;
+                            trailCtx.globalAlpha = c.trail * 0.9;
+                            trailCtx.fillStyle = accentColor;
+                            trailCtx.beginPath();
+                            trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
+                            trailCtx.fill();
+                        }
                     }
-                }
-                trailCtx.fillStyle = '#fff';
-                trailCtx.fill();
-                trailCtx.restore();
-                trailCtx.save();
-                trailCtx.globalCompositeOperation = 'destination-out';
-                for (const c of circles) {
-                    if (c.trail > 0 && c.trail < 1 && c.radius < 0.5) {
-                        const r = TRAIL_DOT * c.trail;
-                        trailCtx.beginPath();
-                        trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
-                        trailCtx.fillStyle = `rgba(0,0,0,${1 - c.trail})`;
-                        trailCtx.fill();
+                    trailCtx.globalAlpha = 1;
+                } else {
+                    // exclusion: inverted wallpaper masked to trail dots
+                    trailCtx.drawImage(homeExcl, 0, 0);
+                    trailCtx.save();
+                    trailCtx.globalCompositeOperation = 'destination-in';
+                    trailCtx.beginPath();
+                    for (const c of circles) {
+                        if (c.trail > 0 && c.radius < 0.5) {
+                            const r = TRAIL_DOT * c.trail;
+                            trailCtx.moveTo(c.x + r, c.y);
+                            trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
+                        }
                     }
+                    trailCtx.fillStyle = '#fff';
+                    trailCtx.fill();
+                    trailCtx.restore();
+                    trailCtx.save();
+                    trailCtx.globalCompositeOperation = 'destination-out';
+                    for (const c of circles) {
+                        if (c.trail > 0 && c.trail < 1 && c.radius < 0.5) {
+                            const r = TRAIL_DOT * c.trail;
+                            trailCtx.beginPath();
+                            trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
+                            trailCtx.fillStyle = `rgba(0,0,0,${1 - c.trail})`;
+                            trailCtx.fill();
+                        }
+                    }
+                    trailCtx.restore();
                 }
-                trailCtx.restore();
 
                 ctx.drawImage(trailBuf, 0, 0);
             }
