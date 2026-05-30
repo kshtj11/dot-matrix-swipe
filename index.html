@@ -219,19 +219,19 @@
             const hue = (total > 0 && hBuckets[maxIdx] / total > 0.1) ? maxIdx * 10 + 5 : 215;
 
             if (avgLum < 0.45) {
-                // dark/midtone bg → light accent, find max L that still hits 7:1
-                for (let sl = 97; sl >= 55; sl--) {
-                    const [r, g, b] = _hsl2rgb(hue, 80, sl);
-                    if (_contrast(_getLum(r, g, b), avgLum) >= 7) return `hsl(${hue},80%,${sl}%)`;
+                // dark/midtone bg → find lowest L (most chromatic) that still hits AA 4.5:1
+                for (let sl = 55; sl <= 97; sl++) {
+                    const [r, g, b] = _hsl2rgb(hue, 95, sl);
+                    if (_contrast(_getLum(r, g, b), avgLum) >= 4.5) return `hsl(${hue},95%,${sl}%)`;
                 }
-                return `hsl(${hue},80%,95%)`;
+                return `hsl(${hue},95%,65%)`;
             } else {
-                // light bg → dark accent
-                for (let sl = 3; sl <= 45; sl++) {
-                    const [r, g, b] = _hsl2rgb(hue, 80, sl);
-                    if (_contrast(avgLum, _getLum(r, g, b)) >= 7) return `hsl(${hue},80%,${sl}%)`;
+                // light bg → find highest L (most chromatic) that still hits AA 4.5:1
+                for (let sl = 45; sl >= 3; sl--) {
+                    const [r, g, b] = _hsl2rgb(hue, 95, sl);
+                    if (_contrast(avgLum, _getLum(r, g, b)) >= 4.5) return `hsl(${hue},95%,${sl}%)`;
                 }
-                return `hsl(${hue},80%,10%)`;
+                return `hsl(${hue},95%,30%)`;
             }
         }
 
