@@ -53,13 +53,12 @@
             z-index: 10;
             pointer-events: none;
         }
-        #exclusionToggle { left: 10px; font-size: 11px; font-weight: 700; }
-        #accentToggle    { left: 48px; font-size: 11px; font-weight: 700; }
-        #coverToggle     { left: 86px; }
+        #trailToggle { left: 10px; font-size: 11px; font-weight: 700; }
+        #coverToggle { left: 48px; }
         #coverLabel {
             position: absolute;
             top: 14px;
-            left: 124px;
+            left: 86px;
             color: rgba(255,255,255,0.4);
             font: 400 11px sans-serif;
             z-index: 10;
@@ -117,9 +116,8 @@
         <button id="burstToggle" class="ctrl-btn">&#x2605;</button>
         <button id="cometToggle" class="ctrl-btn">&#x2604;</button>
         <button id="bgToggle" class="ctrl-btn">&#x25B6;</button>
-        <button id="exclusionToggle" class="ctrl-btn">E</button>
-        <button id="accentToggle"    class="ctrl-btn">A</button>
-        <button id="coverToggle"     class="ctrl-btn">&#x25C0;</button>
+        <button id="trailToggle" class="ctrl-btn">&#x2013;</button>
+        <button id="coverToggle" class="ctrl-btn">&#x25C0;</button>
         <span id="coverLabel">1 / 5</span>
     </div>
     <script>
@@ -441,25 +439,18 @@
             updateCoverLabel();
         });
 
-        const exclusionToggleBtn = document.getElementById('exclusionToggle');
-        const accentToggleBtn    = document.getElementById('accentToggle');
+        const trailToggleBtn = document.getElementById('trailToggle');
+        let trailMode = 0; // 0 = off, 1 = E (exclusion), 2 = A (accent)
+        const trailLabels = ['–', 'E', 'A'];
 
-        exclusionToggleBtn.addEventListener('click', e => {
+        trailToggleBtn.addEventListener('click', e => {
             e.stopPropagation();
-            exclusionMode = !exclusionMode;
-            if (exclusionMode) { accentMode = false; accentToggleBtn.classList.remove('on'); }
-            exclusionToggleBtn.classList.toggle('on', exclusionMode);
-        });
-
-        accentToggleBtn.addEventListener('click', e => {
-            e.stopPropagation();
-            accentMode = !accentMode;
-            if (accentMode) {
-                exclusionMode = false;
-                exclusionToggleBtn.classList.remove('on');
-                accentColor = computeAccentColor();
-            }
-            accentToggleBtn.classList.toggle('on', accentMode);
+            trailMode = (trailMode + 1) % 3;
+            exclusionMode = trailMode === 1;
+            accentMode    = trailMode === 2;
+            trailToggleBtn.textContent = trailLabels[trailMode];
+            trailToggleBtn.classList.toggle('on', trailMode > 0);
+            if (accentMode) accentColor = computeAccentColor();
         });
 
         window.addEventListener('keydown', e => {
