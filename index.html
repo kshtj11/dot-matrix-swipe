@@ -139,7 +139,8 @@
         const SWIPE_THRESHOLD = 90;
         const EASE = 0.08;
         const RETRACT_EASE = 0.19;
-        const TRAIL_DECAY = 0.993;
+        const TRAIL_DECAY      = 0.993; // post-release: slow linger
+        const TRAIL_DECAY_HELD = 0.965; // while held: faster burn-in → creates spatial gradient
         const COMET_SIZE = 88;
         const COMET_HIT = 60;
         const UNLOCK_SPEED = 0.82; // px per ms — crosses ~820px in 1000ms
@@ -171,6 +172,7 @@
         }
 
         let startY = null;
+        let isPointerHeld = false;
         let lastPx = W / 2, lastPy = H / 2;
         let unlockTime = null;
         let unlocked = false;
@@ -529,6 +531,7 @@
         }
 
         canvas.addEventListener('pointerdown', e => {
+            isPointerHeld = true;
             canvas.setPointerCapture(e.pointerId);
             const [px, py] = coords(e);
             lastPx = px; lastPy = py;
@@ -571,6 +574,7 @@
             }
         });
         canvas.addEventListener('pointerup', () => {
+            isPointerHeld = false;
             startY = null;
             if (cometMode && draggingComet && !unlocked) {
                 draggingComet = false;
@@ -608,7 +612,7 @@
                 if (c.radius < 0.1) c.radius = 0;
                 if (c.radius > 0) hasReveal = true;
 
-                c.trail *= TRAIL_DECAY;
+                c.trail *= isPointerHeld ? TRAIL_DECAY_HELD : TRAIL_DECAY;
                 if (c.trail < 0.005) c.trail = 0;
                 if (c.trail > 0) hasTrail = true;
             }
