@@ -181,7 +181,8 @@
         let burstMode = false;
         let exclusionMode = false;
         let accentMode = false;
-        let accentColor = '#ffffff';
+        let accentColor  = '#ffffff';
+        let inverseColor = '#000000';
 
         // --- accent color extraction ---
         function _getLum(r, g, b) {
@@ -221,21 +222,23 @@
             const total = hBuckets.reduce((a, b) => a + b, 0);
             const hue = (total > 0 && hBuckets[maxIdx] / total > 0.1) ? maxIdx * 10 + 5 : 215;
 
+            let sl;
             if (avgLum < 0.45) {
-                // dark/midtone bg → find lowest L (most chromatic) that still hits AA 4.5:1
-                for (let sl = 55; sl <= 97; sl++) {
-                    const [r, g, b] = _hsl2rgb(hue, 95, sl);
-                    if (_contrast(_getLum(r, g, b), avgLum) >= 4.5) return `hsl(${hue},95%,${sl}%)`;
+                sl = 65;
+                for (let l = 55; l <= 97; l++) {
+                    const [r, g, b] = _hsl2rgb(hue, 95, l);
+                    if (_contrast(_getLum(r, g, b), avgLum) >= 4.5) { sl = l; break; }
                 }
-                return `hsl(${hue},95%,65%)`;
             } else {
-                // light bg → find highest L (most chromatic) that still hits AA 4.5:1
-                for (let sl = 45; sl >= 3; sl--) {
-                    const [r, g, b] = _hsl2rgb(hue, 95, sl);
-                    if (_contrast(avgLum, _getLum(r, g, b)) >= 4.5) return `hsl(${hue},95%,${sl}%)`;
+                sl = 30;
+                for (let l = 45; l >= 3; l--) {
+                    const [r, g, b] = _hsl2rgb(hue, 95, l);
+                    if (_contrast(avgLum, _getLum(r, g, b)) >= 4.5) { sl = l; break; }
                 }
-                return `hsl(${hue},95%,30%)`;
             }
+            // inverse: complementary hue + flipped lightness
+            inverseColor = `hsl(${(hue + 180) % 360},95%,${100 - sl}%)`;
+            return `hsl(${hue},95%,${sl}%)`;
         }
 
         const burstToggleBtn = document.getElementById('burstToggle');
@@ -443,17 +446,17 @@
         });
 
         const trailToggleBtn = document.getElementById('trailToggle');
-        let trailMode = 0; // 0 = off, 1 = E (exclusion), 2 = A (accent)
-        const trailLabels = ['–', 'E', 'A'];
+        let trailMode = 0; // 0=off  1=E (exclusion)  2=A (accent)  3=I (inverse accent)
+        const trailLabels = ['–', 'E', 'A', 'I'];
 
         trailToggleBtn.addEventListener('click', e => {
             e.stopPropagation();
-            trailMode = (trailMode + 1) % 3;
+            trailMode = (trailMode + 1) % 4;
             exclusionMode = trailMode === 1;
-            accentMode    = trailMode === 2;
+            accentMode    = trailMode === 2 || trailMode === 3;
             trailToggleBtn.textContent = trailLabels[trailMode];
             trailToggleBtn.classList.toggle('on', trailMode > 0);
-            if (accentMode) accentColor = computeAccentColor();
+            if (trailMode === 2 || trailMode === 3) accentColor = computeAccentColor();
         });
 
         window.addEventListener('keydown', e => {
@@ -626,10 +629,11 @@
             ctx.drawImage(cover, 0, 0);
 
             // build masked reveal (wallpaper OR solid accent) through circle dots
+            const activeAccent = trailMode === 3 ? inverseColor : accentColor;
             if (hasReveal) {
                 maskedCtx.clearRect(0, 0, W, H);
                 if (accentMode && !unlocked) {
-                    maskedCtx.fillStyle = accentColor;
+                    maskedCtx.fillStyle = activeAccent;
                     maskedCtx.fillRect(0, 0, W, H);
                 } else {
                     maskedCtx.drawImage(homeBg, 0, 0);
@@ -659,7 +663,7 @@
                         if (c.trail > 0) {
                             const r = TRAIL_DOT * c.trail;
                             trailCtx.globalAlpha = c.trail * 0.9;
-                            trailCtx.fillStyle = accentColor;
+                            trailCtx.fillStyle = activeAccent;
                             trailCtx.beginPath();
                             trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
                             trailCtx.fill();
