@@ -620,7 +620,7 @@
             // build masked reveal (wallpaper OR solid accent) through circle dots
             if (hasReveal) {
                 maskedCtx.clearRect(0, 0, W, H);
-                if (accentMode) {
+                if (accentMode && !unlocked) {
                     maskedCtx.fillStyle = accentColor;
                     maskedCtx.fillRect(0, 0, W, H);
                 } else {
