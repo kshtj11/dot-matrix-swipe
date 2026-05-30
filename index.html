@@ -222,22 +222,25 @@
             const total = hBuckets.reduce((a, b) => a + b, 0);
             const hue = (total > 0 && hBuckets[maxIdx] / total > 0.1) ? maxIdx * 10 + 5 : 215;
 
-            let sl;
-            if (avgLum < 0.45) {
-                sl = 65;
-                for (let l = 55; l <= 97; l++) {
-                    const [r, g, b] = _hsl2rgb(hue, 95, l);
-                    if (_contrast(_getLum(r, g, b), avgLum) >= 4.5) { sl = l; break; }
-                }
-            } else {
-                sl = 30;
-                for (let l = 45; l >= 3; l--) {
-                    const [r, g, b] = _hsl2rgb(hue, 95, l);
-                    if (_contrast(avgLum, _getLum(r, g, b)) >= 4.5) { sl = l; break; }
+            function _findL(h, dark) {
+                if (dark) {
+                    for (let l = 55; l <= 97; l++) {
+                        const [r,g,b] = _hsl2rgb(h, 95, l);
+                        if (_contrast(_getLum(r,g,b), avgLum) >= 4.5) return l;
+                    }
+                    return 65;
+                } else {
+                    for (let l = 45; l >= 3; l--) {
+                        const [r,g,b] = _hsl2rgb(h, 95, l);
+                        if (_contrast(avgLum, _getLum(r,g,b)) >= 4.5) return l;
+                    }
+                    return 30;
                 }
             }
-            // inverse: complementary hue + flipped lightness
-            inverseColor = `hsl(${(hue + 180) % 360},95%,${100 - sl}%)`;
+            const dark = avgLum < 0.45;
+            const sl  = _findL(hue, dark);
+            const isl = _findL((hue + 180) % 360, dark);
+            inverseColor = `hsl(${(hue + 180) % 360},95%,${isl}%)`;
             return `hsl(${hue},95%,${sl}%)`;
         }
 
