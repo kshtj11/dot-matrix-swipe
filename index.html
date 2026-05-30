@@ -650,9 +650,9 @@
                 trailCtx.clearRect(0, 0, W, H);
 
                 if (accentMode) {
-                    // solid accent colour dots that fade by trail value
+                    // solid accent colour dots, always visible regardless of circle radius
                     for (const c of circles) {
-                        if (c.trail > 0 && c.radius < 0.5) {
+                        if (c.trail > 0) {
                             const r = TRAIL_DOT * c.trail;
                             trailCtx.globalAlpha = c.trail * 0.9;
                             trailCtx.fillStyle = accentColor;
@@ -669,7 +669,7 @@
                     trailCtx.globalCompositeOperation = 'destination-in';
                     trailCtx.beginPath();
                     for (const c of circles) {
-                        if (c.trail > 0 && c.radius < 0.5) {
+                        if (c.trail > 0) {
                             const r = TRAIL_DOT * c.trail;
                             trailCtx.moveTo(c.x + r, c.y);
                             trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
@@ -681,7 +681,7 @@
                     trailCtx.save();
                     trailCtx.globalCompositeOperation = 'destination-out';
                     for (const c of circles) {
-                        if (c.trail > 0 && c.trail < 1 && c.radius < 0.5) {
+                        if (c.trail > 0 && c.trail < 1) {
                             const r = TRAIL_DOT * c.trail;
                             trailCtx.beginPath();
                             trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
